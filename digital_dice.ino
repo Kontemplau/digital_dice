@@ -14,7 +14,6 @@ void display(unsigned pattern) {
     digitalWrite(LEDS[i], (pattern & mask) ? HIGH : LOW);
     mask >>= 1;
   }
-
 }
 
 void setup() {
@@ -26,15 +25,49 @@ void setup() {
   pinMode(BUTTON, INPUT_PULLUP);
 }
 
+class Animation {
+    int light_counter = 0;
+    int dark_counter = 0;
+    int duration;
+
+  public:
+    static constexpr unsigned DARK = 0b00;
+    static constexpr unsigned LIGHT = 0b01;
+    static constexpr unsigned NEW_FACE = 0b10;
+    unsigned animation() {
+      if (dark_counter > 0) {
+        dark_counter -= 1;
+        if (dark_counter == 0) {
+          duration += 5;
+          if (duration > 50) duration = 0;
+          light_counter = duration;
+          return LIGHT + NEW_FACE;
+        }
+        return DARK;
+      }
+      if (light_counter > 0) {
+        light_counter -= 1;
+        if (light_counter == 0) {
+          dark_counter = duration;
+          return DARK;
+        }
+        return LIGHT;
+      }
+      return LIGHT;
+    }
+    void start() {
+      dark_counter = 5;
+      duration = 5;
+    }
+};
+
 template<class Rng>
 class Game {
-    int counter = 0;
-    int subtractor = 10;
-    unsigned output = 0;
-    unsigned prev_face = 6;
+    unsigned face = 0;
     bool previous = true;
-
+    Animation a;
     Rng &rng;
+
   public:
     Game(Rng &rng) : rng(rng) {}
     /// Update the game state.
@@ -42,26 +75,20 @@ class Game {
     unsigned update(bool button) {
       if (button && !previous) {
         // Button wurde gedrückt
-        counter = 250;
+        a.start();
       }
       previous = button;
-      if (counter > 0) {
-        counter -= 1;
-        if (counter % subtractor == 0) {
-          output = FACES[rng() % 6];
-          while (output == prev_face) {
-            output = FACES[rng() % 6];
-          }
-          prev_face = output;
-          subtractor += 5;
 
-        } else if (counter % subtractor == (subtractor * 2) / 3) {
-          output = 0;
+      unsigned x = a.animation();
+
+      if (x & a.NEW_FACE) {
+        unsigned new_face = FACES[rng() % 6];
+        while (face == new_face) {
+          new_face = FACES[rng() % 6];
         }
-      } else {
-        subtractor = 10;
+        face = new_face;
       }
-      return output;
+      return (x & a.LIGHT) ? face : 0;
     }
 };
 
